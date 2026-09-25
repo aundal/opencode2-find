@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 // Session-søgning i opencodes egen SQLite-database (v2.0.6).
 // Læser BÅde v2-tabellerne (session_v2/session_message) og legacy-tabellerne (session/message/part).
-// Brug:  bun scripts/session-search.ts "<query>" [--limit N] [--exclude ses_x] [--cwd C:\path] [--json]
+// Brug:  bun scripts/session-search.ts "<query>" [--limit N] [--exclude ses_x] [--minutes N] [--cwd C:\path] [--json]
+// Standard: søger i alle sessioner, også den igangværende. Brug --minutes N for at springe
+// nyligt brugte sessioner over, eller --exclude <id> for én bestemt.
 // Output: antal + markdown-tabel (eller JSON med --json).
 import { Database } from "bun:sqlite"
 import os from "node:os"
@@ -196,19 +198,29 @@ function detectCurrent(): string | undefined {
   return undefined
 }
 
-const currentSession = exclude ?? detectCurrent()
-
-/** Sessioner der ikke skal med i resultatet: den aktive samtale + valgfrit alle med en prompt fra de sidste N minutter. */
+/**
+ * Standard er at søge i ALT. En session udelades kun når det bedes om:
+ * --exclude <id>, OPENCODE_SESSION_ID, eller --minutes N (alle sessioner med en
+ * prompt fra de sidste N minutter). Nuværende session kan ikke læses fra DB'en,
+ * så den identificeres bedst muligt som den med seneste ikke-tomme brugerprompt.
+ */
 const excluded = new Set<string>()
-if (currentSession) excluded.add(currentSession)
-if (minutes > 0 && has("session_message")) {
-  const since = Date.now() - minutes * 60_000
-  for (const r of db
-    .query(
-      `SELECT session_id, time_created FROM session_message WHERE type = 'user' AND time_created >= ? ORDER BY time_created DESC LIMIT 200;`,
-    )
-    .all(since) as any[])
-    excluded.add(r.session_id)
+if (exclude) excluded.add(exclude)
+else if (process.env.OPENCODE_SESSION_ID) excluded.add(process.env.OPENCODE_SESSION_ID)
+if (minutes > 0) {
+  if (excluded.size === 0) {
+    const current = detectCurrent()
+    if (current) excluded.add(current)
+  }
+  if (has("session_message")) {
+    const since = Date.now() - minutes * 60_000
+    for (const r of db
+      .query(
+        `SELECT session_id, time_created FROM session_message WHERE type = 'user' AND time_created >= ? ORDER BY time_created DESC LIMIT 200;`,
+      )
+      .all(since) as any[])
+      excluded.add(r.session_id)
+  }
 }
 
 const dirFilter = cwd ? cwd.replace(/[\\/]+$/, "").toLowerCase() : undefined

@@ -63,10 +63,14 @@ bun scripts/session-search.ts "sqlite" --limit 10
 | Flag          | Default | Description                                                    |
 | ------------- | ------- | -------------------------------------------------------------- |
 | `--limit N`   | `15`    | Maximum number of sessions in the result                        |
-| `--minutes N` | `0`     | Also drop sessions with a user prompt from the last N minutes  |
+| `--minutes N` | `0`     | Drop sessions with a user prompt from the last N minutes        |
 | `--exclude`   | —       | Drop one specific session id                                    |
 | `--cwd PATH`  | all     | Only sessions started in this directory                         |
 | `--json`      | off     | Raw JSON instead of a markdown table                            |
+
+Every session is searched by default, including the one you are typing in. Use
+`--minutes 30` to skip conversations you have been working in recently, or
+`--exclude <id>` to drop a single session.
 
 `OPENCODE_DB` overrides the database path. The default is
 `~/.local/share/opencode/opencode.db`.
@@ -93,11 +97,11 @@ Notes on the implementation:
   synthetic messages carry `data.content[]` parts. Both are handled.
 - Each session keeps only its best hit: a title match beats message text, which beats
   tool output, which beats shell commands.
-- The active session is dropped. OpenCode does not expose the current session id to
-  tools, so the session with the newest non-empty user prompt is used as a best guess;
-  set `OPENCODE_SESSION_ID` or pass `--exclude` when you know better. `--minutes N`
-  removes every session you have typed in recently, which is the reliable option when
-  you work in several windows at once.
+- The active session is **not** skipped by default — the search covers everything.
+  When you want that, pass `--minutes 30` to drop every session you have typed in
+  recently. OpenCode does not expose the current session id to tools, so identifying
+  it needs a guess: the session with the newest non-empty user prompt. `OPENCODE_SESSION_ID`
+  or `--exclude <id>` sets it explicitly.
 
 ## Files
 
